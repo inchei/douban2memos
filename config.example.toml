@@ -1,0 +1,33 @@
+# memos-plugin-douban 配置模板
+# 复制为当前目录下的 config.toml 即可——程序默认读取当前路径下的 config.toml
+# （不存在则跳过），所有项也可用命令行参数覆盖（命令行优先）。
+# 各键所示值即程序默认值；未注释的必填项请按需填写。
+
+# ---------- 豆瓣 ----------
+douban_user_id = ""                    # 豆瓣用户 ID（必填，无默认值；主页 URL 里 /people/{id}/）
+# import_csv = []                      # 初始导入 CSV（默认自动检测同目录下
+#                                      # db-{类型}-{yyyymmdd}.csv，如 db-book-20260816.csv；
+#                                      # 可在此显式列出其它路径的文件）
+
+# ---------- Memos 写入 ----------
+# 方式一：API 模式（memos 运行中，推荐）
+# api = ""                            # memos 地址，如 "http://localhost:5230"
+# password = ""                       # memos >= 0.30 用密码登录（推荐）
+# token = ""                          # 或直接填 Access Token（memos < 0.30）
+
+# 方式二：直写数据库（需先停止 memos；与 api 二选一）
+# db = "memos.db"
+# user = "admin"
+
+# ---------- 可选 ----------
+# visibility = "private"              # private / protected / public
+# tag = ""                            # 附加标签，空 = 不加
+
+# ---------- 同步 ----------
+# dry_run = false                     # 只预览，不写入
+# full = false                        # 忽略状态文件，全量扫描
+# delete = false                      # 卸载已导入的豆瓣 memos（删除 uid 以 douban- 开头
+#                                     # 的 memo 并重置增量状态；需同 --api 或 --db）
+# verbose = false                     # 逐条输出创建的 memo（默认只输出汇总）
+# state = "state.json"                # 增量状态文件
+# timeout = 30                        # HTTP 超时秒数
