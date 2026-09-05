@@ -660,6 +660,8 @@ def sync(cfg):
 
     created = skipped = total = 0
     max_ts = 0
+    success_max_ts = state["last_updated_ts"]
+    has_error = False
     try:
         for it in items:
             total += 1
@@ -674,9 +676,13 @@ def sync(cfg):
                     content += "\n#" + cfg.get("tag")
                 print("  [dry-run] {}\n{}\n".format(it["uid"], content))
                 created += 1
+                if ts > success_max_ts:
+                    success_max_ts = ts
                 continue
             if it["uid"] in existing:
                 skipped += 1
+                if ts > success_max_ts:
+                    success_max_ts = ts
                 continue
             try:
                 ok = writer.create(it["uid"], it["content"], visibility_value(cfg.get("visibility")),
@@ -684,6 +690,7 @@ def sync(cfg):
                                    cfg.get("tag_in_content", True))
             except Exception as e:
                 print("  创建 {} 失败：{}".format(it["uid"], e))
+                has_error = True
                 continue
             if ok:
                 if cfg.get("verbose"):
@@ -691,16 +698,20 @@ def sync(cfg):
                 created += 1
             else:
                 skipped += 1
+            if ts > success_max_ts:
+                success_max_ts = ts
     finally:
         if close_after:
             writer.close()
 
-    if not cfg.get("dry_run") and max_ts > 0:
-        state["last_updated_ts"] = max_ts
+    if not cfg.get("dry_run") and not has_error and success_max_ts > state["last_updated_ts"]:
+        state["last_updated_ts"] = success_max_ts
         try:
             save_state(cfg.get("state") or "", state)
         except OSError as e:
             die("保存状态文件失败：{}".format(e))
+    elif has_error:
+        print("本次同步存在 memos 写入失败，未更新增量状态文件（下次将重试）")
 
     action = "dry-run 待创建" if cfg.get("dry_run") else "创建"
     print("\n完成：扫描 {} 条，{} {} 条，跳过 {} 条".format(total, action, created, skipped))
