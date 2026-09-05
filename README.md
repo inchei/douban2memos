@@ -26,6 +26,8 @@ memo 为纯文字，正文含状态词、条目名、短评、可选评分和豆
 - memo 正文：`读过《卡拉马佐夫兄弟》：……〔力荐〕` + 豆瓣条目链接
 - 每条 memo 以 `uid = douban-{条目id}` 幂等，重复运行不产生重复 memo
 - 时间用 RSS 的 pubDate / CSV 的打分日期写入 `createTime`/`created_ts`，保留原始时间
+- 标签 `--tag` 默认以 `#tag` 追加到正文并同时显式传入（API: `tags`，直写库: `payload.tags`，双写确保标签生效）；
+  可用 `--no-tag-in-content` 关闭正文追加，此时仅显式传入标签，正文不含 `#tag`，编辑 memo 后标签会丢失
 - 列表按时间降序，状态文件记录最新时间，下次运行提前停止处理更旧条目；`--full` 强制全量
 
 ## 使用方式
@@ -89,15 +91,19 @@ python3 douban2memos.py --douban-user-id 你的豆瓣ID --db ~/.memos/memos.db -
 
 fork 本仓库，参考 [sync.yml](.github/workflows/sync.yml) 每 6 小时在 GitHub runner 上自动跑一次 API 模式同步。
 
-配置仓库 Secrets（Settings → Secrets and variables → Actions）：
+配置仓库 Secrets / Variables（Settings → Secrets and variables → Actions）：
 
-| Secret | 说明 |
-| --- | --- |
-| `DOUBAN_USER_ID` | 豆瓣用户 ID（必填） |
-| `MEMOS_API` | memos 地址，如 `https://memos.example.com`（必填） |
-| `MEMOS_PASSWORD` | memos 密码（memos ≥ 0.30，推荐） |
-| `MEMOS_USER` | memos 登录用户名（配合密码） |
-| `MEMOS_TOKEN` | 或 memos < 0.30 的 Access Token（替代密码） |
+| 名称 | 类型 | 说明 |
+| --- | --- | --- |
+| `DOUBAN_USER_ID` | Secret | 豆瓣用户 ID（必填） |
+| `MEMOS_API` | Secret | memos 地址，如 `https://memos.example.com`（必填） |
+| `MEMOS_PASSWORD` | Secret | memos 密码（memos ≥ 0.30，推荐） |
+| `MEMOS_USER` | Secret | memos 登录用户名（配合密码） |
+| `MEMOS_TOKEN` | Secret | 或 memos < 0.30 的 Access Token（替代密码） |
+| `MEMOS_VISIBILITY` | Secret / Variable | memo 可见性：`private` / `protected` / `public`（可选，默认 `private`；可用 Variables，更语义化） |
+| `MEMOS_TAG` | Secret / Variable | 附加标签（可选，空 = 不加；如 `douban` 则默认正文追加 `#douban`，`--no-tag-in-content` 可关闭） |
+
+`MEMOS_VISIBILITY` / `MEMOS_TAG` 同时对定时任务（`schedule`）与手动触发（`workflow_dispatch`）生效（Secrets 优先于 Variables，未配置则默认 `private` / 不加标签）。
 
 可在首次本地全量导入后，用 **workflow_dispatch** 手动触发一次，在 `watermark` 输入框填本地
 `state.json` 的 `last_updated_ts`（epoch 秒），避免重复全量初始化。
@@ -123,6 +129,7 @@ python3 douban2memos.py --delete --api http://localhost:5230 --user admin --pass
 - 豆瓣无官方 API，公开 RSS 与网页抓取均为非官方手段，未来可能失效
 - 已导入条目后续改短评不会自动更新（`uid` 不变即视为已导入）；如需修正可 `--delete` 后重导
 - 直写数据库前请停止 memos，否则可能 `database is locked`
+- 标签默认同时写入正文与显式标签字段（双写确保标签生效），Memos 前端编辑时会按正文重新提取标签；若用 `--no-tag-in-content` 关闭正文追加，仅显式传入标签（API: `tags`，直写库: `payload.tags`），再次编辑后会丢失
 
 ## 许可证
 

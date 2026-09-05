@@ -53,6 +53,10 @@ jobs:
           MEMOS_USER: ${{ secrets.MEMOS_USER }}
           MEMOS_PASSWORD: ${{ secrets.MEMOS_PASSWORD }}
           MEMOS_TOKEN: ${{ secrets.MEMOS_TOKEN }}
+          VARS_VISIBILITY: ${{ vars.MEMOS_VISIBILITY }}
+          VARS_TAG: ${{ vars.MEMOS_TAG }}
+          SECRETS_VISIBILITY: ${{ secrets.MEMOS_VISIBILITY }}
+          SECRETS_TAG: ${{ secrets.MEMOS_TAG }}
         run: |
           set -euo pipefail
           if [ -z "$DOUBAN_USER_ID" ] || [ -z "$MEMOS_API" ]; then
@@ -66,6 +70,19 @@ jobs:
             args+=(--user "$MEMOS_USER" --password "$MEMOS_PASSWORD")
           fi
           [ "${{ inputs.full }}" = "true" ] && args+=(--full)
+          # 可见性 / 标签：由 Variables/Secrets 控制（Secrets 优先）
+          VISIBILITY="${SECRETS_VISIBILITY:-$VARS_VISIBILITY}"
+          if [ -n "$VISIBILITY" ]; then
+            case "$VISIBILITY" in
+              private|protected|public) ;;
+              *) echo "visibility 需为 private/protected/public，当前为 '$VISIBILITY'" >&2; exit 1 ;;
+            esac
+            args+=(--visibility "$VISIBILITY")
+          fi
+          TAG="${SECRETS_TAG:-$VARS_TAG}"
+          if [ -n "$TAG" ]; then
+            args+=(--tag "$TAG")
+          fi
           python3 douban2memos.py "${args[@]}"
 
       - name: 保存增量状态（cache）
