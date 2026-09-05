@@ -35,8 +35,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: state.json
-          key: memos-plugin-douban-state-${{ github.run_id }}
-          restore-keys: memos-plugin-douban-state-
+          key: douban2memos-state-${{ github.run_id }}
+          restore-keys: douban2memos-state-
 
       - name: 写入初始水印（仅首次播种）
         if: inputs.watermark != '' && steps.restore.outputs.cache-hit != 'true'
@@ -66,11 +66,11 @@ jobs:
             args+=(--user "$MEMOS_USER" --password "$MEMOS_PASSWORD")
           fi
           [ "${{ inputs.full }}" = "true" ] && args+=(--full)
-          python3 memos-plugin-douban.py "${args[@]}"
+          python3 douban2memos.py "${args[@]}"
 
       - name: 保存增量状态（cache）
         if: success()
         uses: actions/cache/save@v4
         with:
           path: state.json
-          key: memos-plugin-douban-state-${{ github.run_id }}
+          key: douban2memos-state-${{ github.run_id }}

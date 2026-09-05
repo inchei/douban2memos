@@ -1,6 +1,6 @@
 # 贡献指南
 
-欢迎为 memos-plugin-douban 贡献代码、文档与 issue。项目以 [GPL-3.0-or-later](LICENSE) 许可发布。
+欢迎为 douban2memos 贡献代码、文档与 issue。项目以 [GPL-3.0-or-later](LICENSE) 许可发布。
 
 ## 开发环境
 
@@ -11,10 +11,10 @@
 ## 常用命令
 
 ```sh
-python3 -m py_compile memos-plugin-douban.py       # 语法检查
-python3 memos-plugin-douban.py --help              # 参数一览
-python3 memos-plugin-douban.py --douban-user-id inchei --dry-run   # 预览
-python3 memos-plugin-douban.py --import-csv db-movie.csv --api …   # 初始导入
+python3 -m py_compile douban2memos.py       # 语法检查
+python3 douban2memos.py --help              # 参数一览
+python3 douban2memos.py --douban-user-id inchei --dry-run   # 预览
+python3 douban2memos.py --import-csv db-movie.csv --api …   # 初始导入
 ```
 
 ## 代码约定
@@ -29,7 +29,7 @@ python3 memos-plugin-douban.py --import-csv db-movie.csv --api …   # 初始导
 ## 提交流程
 
 1. 从 `main` 新建分支：`git checkout -b fix/short-description`
-2. 修改并自检（`python3 -m py_compile memos-plugin-douban.py` + dry-run + 真实导入）
+2. 修改并自检（`python3 -m py_compile douban2memos.py` + dry-run + 真实导入）
 3. 提交（改动前已按上步自检）
 4. 推送并创建 Pull Request，描述改动动机与验证结果
 
@@ -40,5 +40,5 @@ python3 memos-plugin-douban.py --import-csv db-movie.csv --api …   # 初始导
 
 ## 许可证
 
-新增文件请保留文件头的 `Copyright (C) 2026 memos-plugin-douban contributors` 与
+新增文件请保留文件头的 `Copyright (C) 2026 douban2memos contributors` 与
 `SPDX-License-Identifier: GPL-3.0-or-later` 两行。整个项目以 GPL-3.0-or-later 发布。

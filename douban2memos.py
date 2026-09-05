@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# Copyright (C) 2026 memos-plugin-douban contributors
+# Copyright (C) 2026 douban2memos contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""memos-plugin-douban - 将豆瓣「带短评」的收藏标记导入 Memos。
+"""douban2memos - 将豆瓣「带短评」的收藏标记导入 Memos。
 
 纯文字 memo，正文含状态词、条目名、短评（可选评分）与豆瓣条目链接。
 按 memo uid（douban-{条目 subject id}）幂等，重复运行不产生重复 memo；
@@ -21,9 +21,9 @@
 仅用 Python 标准库（urllib / tomllib / sqlite3 / xml.etree / csv），无需安装任何依赖。
 
 用法示例：
-  python3 memos-plugin-douban.py --douban-user-id MoNoMilky --api http://localhost:5230 --password '***'
-  python3 memos-plugin-douban.py --import-csv db-movie.csv db-book.csv --api http://localhost:5230 --password '***'
-  python3 memos-plugin-douban.py --config config.toml --dry-run
+  python3 douban2memos.py --douban-user-id MoNoMilky --api http://localhost:5230 --password '***'
+  python3 douban2memos.py --import-csv db-movie.csv db-book.csv --api http://localhost:5230 --password '***'
+  python3 douban2memos.py --config config.toml --dry-run
 """
 
 import argparse
@@ -50,7 +50,7 @@ except ImportError:
 
 
 def default_ua():
-    return "memos-plugin-douban (https://github.com/inchei/memos-plugin-douban)"
+    return "douban2memos (https://github.com/inchei/douban2memos)"
 
 
 DEFAULT_CONFIG_PATH = "config.toml"
@@ -60,7 +60,7 @@ DEFAULT_VISIBILITY = "private"
 DEFAULT_STATE = "state.json"
 DEFAULT_TIMEOUT = 30
 
-RSS_FEED_BASE = os.environ.get("MEMOS_PLUGIN_DOUBAN_FEED_BASE", "https://www.douban.com")
+RSS_FEED_BASE = os.environ.get("DOUBAN2MEMOS_FEED_BASE", "https://www.douban.com")
 RSS_FEED_URL = RSS_FEED_BASE + "/feed/people/{uid}/interests"
 UID_PREFIX = "douban-"
 
@@ -158,7 +158,7 @@ def parse_str_list(s):
 
 def build_parser(cfg):
     p = argparse.ArgumentParser(
-        prog="memos-plugin-douban",
+        prog="douban2memos",
         description="把豆瓣用户带短评的收藏标记导入 Memos（数据源：公开 RSS + 油猴 CSV）。",
         epilog="配置文件键名 = 选项名去掉 --（- 可写作 _），如 douban_user_id。",
     )

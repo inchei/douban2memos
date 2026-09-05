@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="logo.png" width="120" alt="memos-plugin-douban">
+  <img src="logo.png" width="120" alt="douban2memos">
 </p>
 
-# memos-plugin-douban
+# douban2memos
 
 ![Python](https://img.shields.io/badge/Python-%E2%89%A53.11-3776AB)
 [![Memos](https://img.shields.io/badge/Memos-%E2%89%A50.26.0-1E6D51)](https://github.com/usememos/memos)
@@ -38,7 +38,7 @@ memo 为纯文字，正文含状态词、条目名、短评、可选评分和豆
 （API 或直写均可，直写需先停止 memos）：
 
 ```sh
-python3 memos-plugin-douban.py --api http://localhost:5230 --user admin --password '你的密码'
+python3 douban2memos.py --api http://localhost:5230 --user admin --password '你的密码'
 ```
 
 （也可用 `--import-csv 文件1,文件2` 指定其它路径。）导入后写入 `state.json` 水印，
@@ -49,14 +49,14 @@ python3 memos-plugin-douban.py --api http://localhost:5230 --user admin --passwo
 memos >= 0.30（登录换取短期 token）：
 
 ```sh
-python3 memos-plugin-douban.py --douban-user-id 你的豆瓣ID \
+python3 douban2memos.py --douban-user-id 你的豆瓣ID \
     --api http://localhost:5230 --user admin --password '你的密码'
 ```
 
-0.26.0 ≤ memos < 0.30（使用账号里的 Access Token）：
+ 0.26.0 ≤ memos < 0.30（使用账号里的 Access Token）：
 
 ```sh
-python3 memos-plugin-douban.py --douban-user-id 你的豆瓣ID \
+python3 douban2memos.py --douban-user-id 你的豆瓣ID \
     --api http://localhost:5230 --token 'AccessToken'
 ```
 
@@ -65,7 +65,7 @@ python3 memos-plugin-douban.py --douban-user-id 你的豆瓣ID \
 需停止当前 memos，写完后重启。
 
 ```sh
-python3 memos-plugin-douban.py --douban-user-id 你的豆瓣ID --db ~/.memos/memos.db --user admin
+python3 douban2memos.py --douban-user-id 你的豆瓣ID --db ~/.memos/memos.db --user admin
 ```
 
 ## 同步
@@ -74,7 +74,7 @@ python3 memos-plugin-douban.py --douban-user-id 你的豆瓣ID --db ~/.memos/mem
 
 ```sh
 # 每 30 分钟同步一次
-*/30 * * * * cd /path/to/memos-plugin-douban && python3 memos-plugin-douban.py --config config.toml >> sync.log 2>&1
+*/30 * * * * cd /path/to/douban2memos && python3 douban2memos.py --config config.toml >> sync.log 2>&1
 ```
 
 ### GitHub Actions
@@ -107,7 +107,7 @@ fork 本仓库，参考 [sync.yml](.github/workflows/sync.yml) 每 6 小时在 G
 删除 uid 以 `douban-` 开头（即本工具导入）的 memo，并重置增量状态文件，增加 `--delete` 参数即可，例：
 
 ```sh
-python3 memos-plugin-douban.py --delete --api http://localhost:5230 --user admin --password '你的密码'
+python3 douban2memos.py --delete --api http://localhost:5230 --user admin --password '你的密码'
 ```
 
 ## 配置文件

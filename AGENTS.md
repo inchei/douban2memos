@@ -1,6 +1,6 @@
 # agents.md 开发指引
 
-本文件供 AI 助手 / 开发者在 memos-plugin-douban 仓库工作时参考。
+本文件供 AI 助手 / 开发者在 douban2memos 仓库工作时参考。
 
 ## 项目概述
 
@@ -23,7 +23,7 @@
 
 ## 目录结构
 
-- `memos-plugin-douban.py`  全部代码（含文件头 GPL 版权声明）
+- `douban2memos.py`  全部代码（含文件头 GPL 版权声明）
 - `config.example.toml`     配置模板
 - `.github/workflows/sync.yml` 每 6 小时在 GitHub runner 上跑一次 API 模式同步
   （需 memos 公网可达；凭据走 Secrets；`state.json` 走 Actions cache 不进仓库，支持
@@ -72,19 +72,19 @@
 - API 模式幂等：`memoId` 重复时 memos 返回 `code=6`（ALREADY_EXISTS）视为跳过
 - API 模式 `tag` 以 `#tag` 拼入正文（memos 标签从正文 hashtag 提取）；直写库写 `payload.tags`
 - 直写库要求库已由 memos 初始化（有 `user` 表且存在用户），导入前 memos 必须停止
-- 测试时可将 RSS_FEED_BASE 用环境变量 `MEMOS_PLUGIN_DOUBAN_FEED_BASE` 覆盖为本机 mock
+- 测试时可将 RSS_FEED_BASE 用环境变量 `DOUBAN2MEMOS_FEED_BASE` 覆盖为本机 mock
 
 ## 验证
 
 ```sh
 # 语法检查
-python3 -m py_compile memos-plugin-douban.py
+python3 -m py_compile douban2memos.py
 
 # 帮助
-python3 memos-plugin-douban.py --help
+python3 douban2memos.py --help
 
 # dry-run 预览（不写入 memos，不保存状态）
-python3 memos-plugin-douban.py --douban-user-id inchei --dry-run
+python3 douban2memos.py --douban-user-id inchei --dry-run
 
 # API 模式端到端：本地起一个测试 memos（--data 临时目录、--port 5230）并建用户，
 # 真实导入一次，再次运行确认幂等跳过，并抽查 memo 的 uid / createTime / content。
