@@ -7,10 +7,10 @@
 把豆瓣「看过/读过/听过/玩过」且带短评的收藏导入 Memos，纯文字 memo。
 支持两种写入模式：
 
-- **API 模式**（`--api`，memos 运行中，推荐）：memos ≥ 0.30 用 `--user`+`--password`
+- **API 模式**（`--api`，memos 运行中）：memos ≥ 0.30 用 `--user`+`--password`
   调用 `/api/v1/auth/signin` 换取短期 token；memos < 0.30 用 `--token`（Access Token）。
   `POST /api/v1/memos?memoId={uid}` 设置 uid 且幂等；请求体 `createTime` 保留豆瓣时间。
-- **直写数据库**（`--db`）：直接插入 memos sqlite `memo` 表（需先停止 memos）。
+- **直写数据库**（`--db`）：直接插入 memos sqlite `memo` 表。
 
 豆瓣无公开 API，数据源沿用 douban-backup 的做法、全程无需登录：
 - 日常增量：公开 RSS `https://www.douban.com/feed/people/{uid}/interests`
@@ -71,7 +71,7 @@
   此后每次跑完自动存回
 - API 模式幂等：`memoId` 重复时 memos 返回 `code=6`（ALREADY_EXISTS）视为跳过
 - `tag` 默认以 `#tag` 拼入正文并同时显式传入（API: `tags`，直写库: `payload.tags`，双写确保标签生效）；`--no-tag-in-content` 关闭后仅显式传入标签，正文不含 `#tag`，编辑后标签会丢失
-- 直写库要求库已由 memos 初始化（有 `user` 表且存在用户），导入前 memos 必须停止
+- 直写库要求库已由 memos 初始化（有 `user` 表且存在用户）
 - 测试时可将 RSS_FEED_BASE 用环境变量 `DOUBAN2MEMOS_FEED_BASE` 覆盖为本机 mock
 
 ## 验证
@@ -88,7 +88,7 @@ python3 douban2memos.py --douban-user-id inchei --dry-run
 
 # API 模式端到端：本地起一个测试 memos（--data 临时目录、--port 5230）并建用户，
 # 真实导入一次，再次运行确认幂等跳过，并抽查 memo 的 uid / createTime / content。
-# 直写库模式：memos 停止后用 --db 指向测试库导入，重启后用 API 抽查。
+# 直写库模式：用 --db 指向测试库导入，再用 API 抽查。
 ```
 
 改动后必须跑通一次 dry-run 和一次真实导入（含重复运行幂等检查）。

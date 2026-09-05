@@ -37,7 +37,7 @@ memo 为纯文字，正文含状态词、条目名、短评、可选评分和豆
 安装 douban-backup 的油猴脚本 <https://greasyfork.org/en/scripts/420999>，打开自己豆瓣主页，
 点「导出看过的片 / 读过的书 / 听过的碟 / 玩过的游戏」，脚本会逐页导出各类型 CSV
 （`db-movie-20260816.csv` 等）。把导出的 CSV 放进**脚本同目录**，直接运行即可自动检测导入
-（API 或直写均可，直写需先停止 memos）：
+（API 或直写均可）：
 
 ```sh
 python3 douban2memos.py --api http://localhost:5230 --user admin --password '你的密码'
@@ -63,8 +63,6 @@ python3 douban2memos.py --douban-user-id 你的豆瓣ID \
 ```
 
 ### 方式二：直写数据库
-
-需停止当前 memos，写完后重启。
 
 ```sh
 python3 douban2memos.py --douban-user-id 你的豆瓣ID --db ~/.memos/memos.db --user admin
@@ -97,7 +95,7 @@ fork 本仓库，参考 [sync.yml](.github/workflows/sync.yml) 每 6 小时在 G
 | --- | --- | --- |
 | `DOUBAN_USER_ID` | Secret | 豆瓣用户 ID（必填） |
 | `MEMOS_API` | Secret | memos 地址，如 `https://memos.example.com`（必填） |
-| `MEMOS_PASSWORD` | Secret | memos 密码（memos ≥ 0.30，推荐） |
+| `MEMOS_PASSWORD` | Secret | memos 密码（memos ≥ 0.30） |
 | `MEMOS_USER` | Secret | memos 登录用户名（配合密码） |
 | `MEMOS_TOKEN` | Secret | 或 memos < 0.30 的 Access Token（替代密码） |
 | `MEMOS_VISIBILITY` | Secret / Variable | memo 可见性：`private` / `protected` / `public`（可选，默认 `private`；可用 Variables，更语义化） |
@@ -128,7 +126,6 @@ python3 douban2memos.py --delete --api http://localhost:5230 --user admin --pass
   手动触发一次；历史收藏用油猴 CSV 一次性补齐
 - 豆瓣无官方 API，公开 RSS 与网页抓取均为非官方手段，未来可能失效
 - 已导入条目后续改短评不会自动更新（`uid` 不变即视为已导入）；如需修正可 `--delete` 后重导
-- 直写数据库前请停止 memos，否则可能 `database is locked`
 - 标签默认同时写入正文与显式标签字段（双写确保标签生效），Memos 前端编辑时会按正文重新提取标签；若用 `--no-tag-in-content` 关闭正文追加，仅显式传入标签（API: `tags`，直写库: `payload.tags`），再次编辑后会丢失
 
 ## 许可证

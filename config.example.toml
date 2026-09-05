@@ -10,12 +10,12 @@ douban_user_id = ""                    # 豆瓣用户 ID（必填，无默认值
 #                                      # 可在此显式列出其它路径的文件）
 
 # ---------- Memos 写入 ----------
-# 方式一：API 模式（memos 运行中，推荐）
+# 方式一：API 模式（memos 运行中）
 # api = ""                            # memos 地址，如 "http://localhost:5230"
-# password = ""                       # memos >= 0.30 用密码登录（推荐）
+# password = ""                       # memos >= 0.30 用密码登录
 # token = ""                          # 或直接填 Access Token（memos < 0.30）
 
-# 方式二：直写数据库（需先停止 memos；与 api 二选一）
+# 方式二：直写数据库
 # db = "memos.db"
 # user = "admin"
 

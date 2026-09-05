@@ -14,9 +14,9 @@
      douban-backup）导出的 CSV，用 --import-csv 一次性导入历史收藏
 
 两种写入方式：
-  1. API 模式（--api，memos 运行中，推荐）：memos >= 0.30 用 --password 登录换取短期 token，
+  1. API 模式（--api，memos 运行中）：memos >= 0.30 用 --password 登录换取短期 token，
      < 0.30 用 --token（Access Token）；请求体带 createTime 保留豆瓣时间
-  2. 直写数据库（--db，需先停止 memos）：直接插入 memo 表，保留时间
+  2. 直写数据库（--db）：直接插入 memo 表，保留时间
 
 仅用 Python 标准库（urllib / tomllib / sqlite3 / xml.etree / csv），无需安装任何依赖。
 
