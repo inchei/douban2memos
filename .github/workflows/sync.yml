@@ -57,6 +57,10 @@ jobs:
           VARS_TAG: ${{ vars.MEMOS_TAG }}
           SECRETS_VISIBILITY: ${{ secrets.MEMOS_VISIBILITY }}
           SECRETS_TAG: ${{ secrets.MEMOS_TAG }}
+          VARS_NEODB: ${{ vars.NEODB }}
+          VARS_NEODB_BASE: ${{ vars.NEODB_BASE }}
+          SECRETS_NEODB: ${{ secrets.NEODB }}
+          SECRETS_NEODB_BASE: ${{ secrets.NEODB_BASE }}
         run: |
           set -euo pipefail
           if [ -z "$DOUBAN_USER_ID" ] || [ -z "$MEMOS_API" ]; then
@@ -82,6 +86,18 @@ jobs:
           TAG="${SECRETS_TAG:-$VARS_TAG}"
           if [ -n "$TAG" ]; then
             args+=(--tag "$TAG")
+          fi
+          # NeoDB 转换：由 Variables/Secrets 控制（Secrets 优先）
+          NEODB="${SECRETS_NEODB:-$VARS_NEODB}"
+          NEODB_BASE="${SECRETS_NEODB_BASE:-$VARS_NEODB_BASE}"
+          NEODB_LC="$(printf '%s' "$NEODB" | tr '[:upper:]' '[:lower:]')"
+          if [ "$NEODB_LC" = "true" ] || [ "$NEODB_LC" = "1" ] || [ "$NEODB_LC" = "yes" ]; then
+            args+=(--neodb)
+            if [ -n "$NEODB_BASE" ]; then
+              args+=(--neodb-base "$NEODB_BASE")
+            fi
+          elif [ -n "$NEODB_BASE" ]; then
+            args+=(--neodb --neodb-base "$NEODB_BASE")
           fi
           python3 douban2memos.py "${args[@]}"
 

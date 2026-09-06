@@ -20,6 +20,8 @@ douban_user_id = ""                    # 豆瓣用户 ID（必填，无默认值
 # user = "admin"
 
 # ---------- 可选 ----------
+# neodb = false                         # 是否将豆瓣链接转为 NeoDB 链接（调用 {neodb_base}/api/catalog/fetch）
+# neodb_base = "https://neodb.social"  # NeoDB 实例地址，需配合 neodb = true 使用
 # visibility = "private"              # private / protected / public
 # tag = ""                            # 附加标签，空 = 不加；默认以 #tag 追加到正文并显式传入
 # tag_in_content = true               # 是否将标签追加到正文（默认 true，同时显式传入）；设为 false 则仅显式传入标签（API: tags，直写库: payload.tags），正文不含 #tag，编辑 memo 后标签会丢失

@@ -23,7 +23,9 @@ memo 为纯文字，正文含状态词、条目名、短评、可选评分和豆
   `https://www.douban.com/feed/people/{uid}/interests`，初始用油猴脚本导出的 CSV 导入
 - 仅导入**带短评**（RSS 的 `备注:` / CSV 的「我的短评」）且状态为看过/读过/听过/玩过的条目，
   无短评或想看/在读等非完成态一律跳过
-- memo 正文：`读过《卡拉马佐夫兄弟》：……〔力荐〕` + 豆瓣条目链接
+- memo 正文：`读过《卡拉马佐夫兄弟》：……〔力荐〕` + 豆瓣条目链接（默认 `https://movie.douban.com/subject/...` 等；
+  `--neodb` 可将链接转为 NeoDB 链接，通过 `GET {neodb_base}/api/catalog/fetch?url={豆瓣条目链接}` 查询，命中则显示
+  `https://neodb.social/book/...` 等，202 等待 15 秒重试一次、429 限流，首次未完成则保留原链接并下次重试；链接后追加空行以触发 Memos 预览）
 - 每条 memo 以 `uid = douban-{条目id}` 幂等，重复运行不产生重复 memo
 - 时间用 RSS 的 pubDate / CSV 的打分日期写入 `createTime`/`created_ts`，保留原始时间
 - 标签 `--tag` 默认以 `#tag` 追加到正文并同时显式传入（API: `tags`，直写库: `payload.tags`，双写确保标签生效）；
@@ -100,8 +102,10 @@ fork 本仓库，参考 [sync.yml](.github/workflows/sync.yml) 每 6 小时在 G
 | `MEMOS_TOKEN` | Secret | 或 memos < 0.30 的 Access Token（替代密码） |
 | `MEMOS_VISIBILITY` | Secret / Variable | memo 可见性：`private` / `protected` / `public`（可选，默认 `private`；可用 Variables，更语义化） |
 | `MEMOS_TAG` | Secret / Variable | 附加标签（可选，空 = 不加；如 `douban` 则默认正文追加 `#douban`，`--no-tag-in-content` 可关闭） |
+| `NEODB` | Secret / Variable | 是否启用 NeoDB 链接转换：`true`/`1`/`yes` 启用（可选，默认不启用；可单独配置 `NEODB_BASE` 隐式启用） |
+| `NEODB_BASE` | Secret / Variable | NeoDB 实例地址（可选，默认 `https://neodb.social`；如 `https://neodb.example.com`） |
 
-`MEMOS_VISIBILITY` / `MEMOS_TAG` 同时对定时任务（`schedule`）与手动触发（`workflow_dispatch`）生效（Secrets 优先于 Variables，未配置则默认 `private` / 不加标签）。
+`MEMOS_VISIBILITY` / `MEMOS_TAG` / `NEODB` / `NEODB_BASE` 同时对定时任务（`schedule`）与手动触发（`workflow_dispatch`）生效（Secrets 优先于 Variables，未配置则默认 `private` / 不加标签 / 不转换）。
 
 可在首次本地全量导入后，用 **workflow_dispatch** 手动触发一次，在 `watermark` 输入框填本地
 `state.json` 的 `last_updated_ts`（epoch 秒），避免重复全量初始化。

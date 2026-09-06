@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """douban2memos - 将豆瓣「带短评」的收藏标记导入 Memos。
 
-纯文字 memo，正文含状态词、条目名、短评（可选评分）与豆瓣条目链接。
+纯文字 memo，正文含状态词、条目名、短评（可选评分）与豆瓣条目链接（可配置转为 NeoDB 链接）。
 按 memo uid（douban-{条目 subject id}）幂等，重复运行不产生重复 memo；
 默认增量同步（状态文件记录最新 pubDate，提前停止处理更旧条目），--full 强制全量。
 
@@ -18,12 +18,19 @@
      < 0.30 用 --token（Access Token）；请求体带 createTime 保留豆瓣时间
   2. 直写数据库（--db）：直接插入 memo 表，保留时间
 
+NeoDB 转换（--neodb）：
+  调用 {neodb_base}/api/catalog/fetch?url={豆瓣条目链接}
+  参考 https://neodb.social/api/openapi.json 的 catalog_apis_fetch_item：
+  302 已抓取、202 抓取中（等待 15 秒后重试一次，部分站点需 ~90 秒）、429 限流；
+  首次 202 后重试一次仍未完成则退回豆瓣原链接，下次同步将再次尝试。
+
 仅用 Python 标准库（urllib / tomllib / sqlite3 / xml.etree / csv），无需安装任何依赖。
 
 用法示例：
   python3 douban2memos.py --douban-user-id MoNoMilky --api http://localhost:5230 --password '***'
   python3 douban2memos.py --import-csv db-movie.csv db-book.csv --api http://localhost:5230 --password '***'
   python3 douban2memos.py --config config.toml --dry-run
+  python3 douban2memos.py --douban-user-id MoNoMilky --api http://localhost:5230 --password '***' --neodb
 """
 
 import argparse
@@ -59,6 +66,7 @@ DEFAULT_USER = "admin"
 DEFAULT_VISIBILITY = "private"
 DEFAULT_STATE = "state.json"
 DEFAULT_TIMEOUT = 30
+DEFAULT_NEODB_BASE = "https://neodb.social"
 
 RSS_FEED_BASE = os.environ.get("DOUBAN2MEMOS_FEED_BASE", "https://www.douban.com")
 RSS_FEED_URL = RSS_FEED_BASE + "/feed/people/{uid}/interests"
@@ -102,6 +110,8 @@ DEFAULT_TIMEZONE = "+08:00"
 DEFAULTS = {
     "douban_user_id": "",
     "import_csv": [],
+    "neodb": False,
+    "neodb_base": DEFAULT_NEODB_BASE,
     "api": "",
     "token": "",
     "password": "",
@@ -187,6 +197,8 @@ def build_parser(cfg):
                    help="豆瓣用户 ID（主页 URL 里 /people/{id}/，RSS 抓取必填）")
     p.add_argument("--import-csv", dest="import_csv", type=parse_str_list, default=cfg["import_csv"],
                    help="初始导入：油猴脚本 export.user.js 导出的 CSV 文件，逗号分隔多个（一次性历史全量）")
+    p.add_argument("--neodb", dest="neodb", action=argparse.BooleanOptionalAction, default=cfg["neodb"], help="将豆瓣链接转换为 NeoDB 链接显示（调用 NeoDB 的 /api/catalog/fetch）")
+    p.add_argument("--neodb-base", dest="neodb_base", default=cfg["neodb_base"], help="NeoDB 实例地址（默认 https://neodb.social，需配合 --neodb 使用）")
     p.add_argument("--api", default=cfg["api"], help="Memos API 地址（设置则用 API 模式）")
     p.add_argument("--token", default=cfg["token"], help="Memos token（memos < 0.30 的 Access Token）")
     p.add_argument("--password", default=cfg["password"], help="Memos 密码（memos >= 0.30 用于登录换取 token）")
@@ -224,11 +236,109 @@ def category_from_link(link):
     return "movie"
 
 
-def build_content(status, title, comment, rating, link):
+def build_content(status, title, comment, rating, link, neodb_url=None):
     body = "{0}《{1}》：{2}".format(status, title, comment)
     if rating:
         body += " 〔{0}〕".format(rating)
-    return "{0}\n\n{1}".format(body, link)
+    link = neodb_url if neodb_url else link
+    return "{0}\n\n{1}\n".format(body, link)
+
+
+def fetch_neodb_url(douban_url, neodb_base, timeout, verbose=False):
+    """调用 NeoDB /api/catalog/fetch 将豆瓣链接转换为 NeoDB 链接。
+
+    参考 neodb 文档 /api/catalog/fetch：
+      302 已有条目（返回 {url: /api/...}，urllib 跟随后为 200 的条目 JSON）
+      202 正在抓取，需等待 15 秒以上后重试；部分站点需 ~90 秒
+      429 频繁请求；404/422 不支持或无条目
+    首次 202 后等待 15 秒重试一次，若仍未完成则退回原链接（NeoDB 后台仍在抓取，
+    下次同步即可命中）；429 同等待 15 秒后重试一次。
+    """
+    fetch_url = "{0}/api/catalog/fetch?url={1}".format(
+        neodb_base.rstrip("/"), urllib.parse.quote(douban_url, safe=""))
+    headers = {"Accept": "application/json", "User-Agent": default_ua()}
+    deadline = 120
+    start = time.monotonic()
+    attempt = 0
+    while True:
+        elapsed = time.monotonic() - start
+        if elapsed >= deadline:
+            if verbose:
+                print("  NeoDB 转换超时（{}）：{} 仍未完成，退回豆瓣链接".format(douban_url, douban_url))
+            return None
+        try:
+            code, body = http_req(fetch_url, headers=headers, timeout=timeout)
+        except RuntimeError as e:
+            if verbose:
+                print("  NeoDB 请求失败（{}）：{}，退回豆瓣链接".format(douban_url, e))
+            return None
+        if code == 200:
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except ValueError:
+                return None
+            web_path = data.get("url") or ""
+            if web_path.startswith("/"):
+                return neodb_base.rstrip("/") + web_path
+            item_id = data.get("id") or ""
+            if item_id.startswith("http"):
+                return item_id
+            api_path = data.get("url") or ""
+            if api_path.startswith("/api/"):
+                return neodb_base.rstrip("/") + api_path[4:]
+            return None
+        if code == 302:
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except ValueError:
+                return None
+            api_path = data.get("url") or ""
+            if api_path.startswith("/api/"):
+                return neodb_base.rstrip("/") + api_path[4:]
+            if api_path.startswith("/"):
+                return neodb_base.rstrip("/") + api_path
+            if api_path.startswith("http"):
+                return api_path
+            return None
+        if code == 202:
+            if attempt >= 1:
+                if verbose:
+                    print("  NeoDB 仍在抓取 {}，本次先保留豆瓣链接（后台抓取中，下次同步将重试）".format(douban_url))
+                return None
+            if verbose:
+                print("  NeoDB 正在抓取 {}，15 秒后重试…".format(douban_url))
+            remain = deadline - (time.monotonic() - start)
+            wait = 15
+            if remain <= 0:
+                return None
+            time.sleep(min(wait, remain))
+            attempt += 1
+            continue
+        if code == 429:
+            if attempt >= 1:
+                if verbose:
+                    print("  NeoDB 限流（429）{}，本次先保留豆瓣链接，下次同步将重试".format(douban_url))
+                return None
+            if verbose:
+                print("  NeoDB 请求频繁（429），15 秒后重试 {}…".format(douban_url))
+            remain = deadline - (time.monotonic() - start)
+            if remain <= 0:
+                return None
+            wait = 15
+            time.sleep(min(wait, remain))
+            attempt += 1
+            continue
+        if code in (404, 422):
+            if verbose:
+                print("  NeoDB 暂无条目 {}（HTTP {}），保留豆瓣链接".format(douban_url, code))
+            return None
+        if verbose:
+            try:
+                msg = json.loads(body.decode("utf-8")).get("message") or truncate(body.decode("utf-8", "replace"), 120)
+            except ValueError:
+                msg = truncate(body.decode("utf-8", "replace"), 120)
+            print("  NeoDB 转换失败 {}：HTTP {} {}，保留豆瓣链接".format(douban_url, code, msg))
+        return None
 
 
 def rating_from_rss(text):
@@ -386,6 +496,10 @@ def rss_item_to_memo(item):
         "create_time": dt.isoformat(),
         "ts": ts,
         "title": display_title,
+        "status": prefix,
+        "comment": comment,
+        "rating": rating_word,
+        "link": link,
     }
 
 
@@ -444,6 +558,10 @@ def csv_row_to_memo(row, has_detail, tz=None):
         "create_time": create_time,
         "ts": ts,
         "title": title,
+        "status": status,
+        "comment": comment,
+        "rating": rating_word,
+        "link": link,
     }
 
 
@@ -521,8 +639,41 @@ class APIWriter:
                 break
         return uids
 
+    def list_existing_contents(self):
+        contents = {}
+        page_token = ""
+        while True:
+            query = {"pageSize": "1000"}
+            if self.user:
+                query["filter"] = 'creator == "{0}"'.format(self.user)
+            if page_token:
+                query["pageToken"] = page_token
+            code, body = self._request("GET", "/api/v1/memos", query)
+            if code != 200:
+                raise RuntimeError("memos 列表请求失败（HTTP {0}）：{1}".format(code, truncate(body.decode("utf-8", "replace"), 200)))
+            out = json.loads(body.decode("utf-8"))
+            for m in out.get("memos") or []:
+                name = m.get("name") or ""
+                if name.startswith("memos/"):
+                    contents[name[len("memos/"):]] = m.get("content") or ""
+            page_token = out.get("nextPageToken") or ""
+            if not page_token:
+                break
+        return contents
+
     def list_douban_owned(self):
         return sorted(u for u in self.list_existing_uids() if u.startswith(UID_PREFIX))
+
+    def update(self, uid, content, visibility, tag, tag_in_content=True):
+        if tag and tag_in_content:
+            content += "\n#" + tag
+        payload = {"content": content, "visibility": visibility}
+        if tag:
+            payload["tags"] = [tag]
+        code, body = self._request("PATCH", "/api/v1/memos/" + urllib.parse.quote(uid, safe=""), payload)
+        if code in (200, 204):
+            return True
+        raise RuntimeError("更新 memo 失败：HTTP {0}：{1}".format(code, truncate(body.decode("utf-8", "replace"), 200)))
 
     def create(self, uid, content, visibility, create_time, ts, tag, tag_in_content=True):
         if tag and tag_in_content:
@@ -589,11 +740,28 @@ class DBWriter:
         rows = self.conn.execute("SELECT uid FROM memo").fetchall()
         return set(r[0] for r in rows if r[0])
 
+    def list_existing_contents(self):
+        rows = self.conn.execute("SELECT uid, content FROM memo").fetchall()
+        return {r[0]: r[1] or "" for r in rows if r[0]}
+
     def list_douban_owned(self):
         rows = self.conn.execute(
             "SELECT uid FROM memo WHERE creator_id = ? AND uid LIKE ? ORDER BY uid",
             (self.user_id, UID_PREFIX + "%")).fetchall()
         return [r[0] for r in rows]
+
+    def update(self, uid, content, visibility, tag, tag_in_content=True):
+        if tag and tag_in_content:
+            content += "\n#" + tag
+        payload = {}
+        if tag:
+            payload["tags"] = [tag]
+        now = int(time.time())
+        cur = self.conn.execute(
+            "UPDATE memo SET content = ?, visibility = ?, payload = ?, updated_ts = ? WHERE uid = ? AND creator_id = ?",
+            (content, visibility, json.dumps(payload), now, uid, self.user_id))
+        self.conn.commit()
+        return cur.rowcount > 0
 
     def create(self, uid, content, visibility, create_time, ts, tag, tag_in_content=True):
         exists = self.conn.execute("SELECT COUNT(1) FROM memo WHERE uid = ?", (uid,)).fetchone()[0]
@@ -628,11 +796,17 @@ def open_writer(cfg, timeout):
         else:
             raise RuntimeError("API 模式需要 --token，或 --user 与 --password（memos >= 0.30）")
         writer.set_timeout(timeout)
-        existing = writer.list_existing_uids()
+        if cfg.get("neodb"):
+            existing = writer.list_existing_contents()
+        else:
+            existing = writer.list_existing_uids()
         return writer, existing
     writer = DBWriter(cfg["db"], cfg["user"])
     try:
-        existing = writer.list_existing_uids()
+        if cfg.get("neodb"):
+            existing = writer.list_existing_contents()
+        else:
+            existing = writer.list_existing_uids()
     except Exception:
         writer.close()
         raise
@@ -672,9 +846,12 @@ def sync(cfg):
     items.sort(key=lambda it: it["ts"], reverse=True)
 
     state = load_state(cfg.get("state") or "")
-    incremental = (not cfg.get("full")) and state["last_updated_ts"] > 0
+    neodb_mode = bool(cfg.get("neodb"))
+    incremental = (not cfg.get("full")) and state["last_updated_ts"] > 0 and not neodb_mode
     if incremental:
         print("增量模式：跳过时间戳 <= {} 的旧条目（--full 强制全量）".format(fmt_ts(state["last_updated_ts"], tz if import_paths else None)))
+    elif neodb_mode and not cfg.get("full") and state["last_updated_ts"] > 0:
+        print("全量模式：--neodb 已启用，对已存在 memo 进行链接补齐（忽略增量水印）")
     else:
         print("全量模式：首次运行或无有效状态，处理本次抓取的全部条目")
 
@@ -686,10 +863,11 @@ def sync(cfg):
     else:
         close_after = False
 
-    created = skipped = total = 0
+    created = skipped = updated = total = 0
     max_ts = 0
     success_max_ts = state["last_updated_ts"]
     has_error = False
+    neodb_cache = {}
     try:
         for it in items:
             total += 1
@@ -698,22 +876,68 @@ def sync(cfg):
                 max_ts = ts
             if incremental and ts <= state["last_updated_ts"]:
                 break
+            uid = it["uid"]
+            link = it.get("link") or ""
+            content = it["content"]
+            neodb_url = None
+            if cfg.get("neodb") and link:
+                neodb_base = cfg.get("neodb_base") or DEFAULT_NEODB_BASE
+                skip_neodb_fetch = False
+                if uid in existing and isinstance(existing, dict):
+                    old_for_check = existing.get(uid) or ""
+                    nb_host = urllib.parse.urlsplit(neodb_base).hostname or ""
+                    if nb_host and nb_host in old_for_check:
+                        skip_neodb_fetch = True
+                    elif "neodb" in old_for_check.lower():
+                        skip_neodb_fetch = True
+                if skip_neodb_fetch:
+                    neodb_url = None
+                    neodb_cache[link] = None
+                elif link in neodb_cache:
+                    neodb_url = neodb_cache[link]
+                else:
+                    neodb_url = fetch_neodb_url(link, neodb_base, timeout, verbose=cfg.get("verbose"))
+                    neodb_cache[link] = neodb_url
+                    if neodb_url and cfg.get("verbose"):
+                        print("  NeoDB 转换 {} -> {}".format(link, neodb_url))
+                if neodb_url:
+                    content = build_content(it.get("status") or "", it.get("title") or "", it.get("comment") or "", it.get("rating"), link, neodb_url)
             if cfg.get("dry_run"):
-                content = it["content"]
                 if cfg.get("tag") and cfg.get("tag_in_content"):
                     content += "\n#" + cfg.get("tag")
-                print("  [dry-run] {}\n{}\n".format(it["uid"], content))
+                print("  [dry-run] {}\n{}\n".format(uid, content))
                 created += 1
                 if ts > success_max_ts:
                     success_max_ts = ts
                 continue
-            if it["uid"] in existing:
+            if uid in existing:
+                if cfg.get("neodb") and neodb_url and isinstance(existing, dict):
+                    old_content = existing.get(uid) or ""
+                    tag = cfg.get("tag") or ""
+                    tag_in_content = cfg.get("tag_in_content", True)
+                    expected = content + ("\n#" + tag if tag and tag_in_content else "")
+                    if old_content != expected and neodb_url not in old_content:
+                        if "douban.com" in old_content or "/subject" in old_content:
+                            try:
+                                writer.update(uid, content, visibility_value(cfg.get("visibility")), tag, tag_in_content)
+                            except Exception as e:
+                                print("  更新 {} 失败：{}".format(uid, e))
+                                has_error = True
+                                if ts > success_max_ts:
+                                    success_max_ts = ts
+                                continue
+                            if cfg.get("verbose"):
+                                print("  已更新 {}：{} douban -> neodb".format(uid, it.get("title") or ""))
+                            updated += 1
+                            if ts > success_max_ts:
+                                success_max_ts = ts
+                            continue
                 skipped += 1
                 if ts > success_max_ts:
                     success_max_ts = ts
                 continue
             try:
-                ok = writer.create(it["uid"], it["content"], visibility_value(cfg.get("visibility")),
+                ok = writer.create(uid, content, visibility_value(cfg.get("visibility")),
                                    it.get("create_time") or "", ts, cfg.get("tag") or "",
                                    cfg.get("tag_in_content", True))
             except Exception as e:
@@ -742,7 +966,10 @@ def sync(cfg):
         print("本次同步存在 memos 写入失败，未更新增量状态文件（下次将重试）")
 
     action = "dry-run 待创建" if cfg.get("dry_run") else "创建"
-    print("\n完成：扫描 {} 条，{} {} 条，跳过 {} 条".format(total, action, created, skipped))
+    if updated:
+        print("\n完成：扫描 {} 条，{} {} 条，更新 {} 条，跳过 {} 条".format(total, action, created, updated, skipped))
+    else:
+        print("\n完成：扫描 {} 条，{} {} 条，跳过 {} 条".format(total, action, created, skipped))
     return 0
 
 
