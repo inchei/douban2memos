@@ -32,3 +32,4 @@ douban_user_id = ""                    # 豆瓣用户 ID（必填，无默认值
 # verbose = false                     # 逐条输出创建的 memo（默认只输出汇总）
 # state = "state.json"                # 增量状态文件
 # timeout = 30                        # HTTP 超时秒数
+# timezone = "+08:00"                 # 时区（默认 +08:00 东八区；格式 +08:00，仅用于 CSV 日期）

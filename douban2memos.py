@@ -97,6 +97,8 @@ def truncate(s, n):
     return s[:n] + "…"
 
 
+DEFAULT_TIMEZONE = "+08:00"
+
 DEFAULTS = {
     "douban_user_id": "",
     "import_csv": [],
@@ -114,7 +116,24 @@ DEFAULTS = {
     "delete": False,
     "state": DEFAULT_STATE,
     "timeout": DEFAULT_TIMEOUT,
+    "timezone": DEFAULT_TIMEZONE,
 }
+
+
+def parse_timezone(s):
+    if s is None or str(s).strip() == "":
+        s = DEFAULT_TIMEZONE
+    s = str(s).strip()
+    m = re.match(r"^([+-]?)(\d{1,2})(?::(\d{2}))?$", s)
+    if m:
+        sign_s, h_s, mm_s = m.groups()
+        sign = -1 if sign_s == "-" else 1
+        h = int(h_s)
+        mm = int(mm_s) if mm_s else 0
+        if h > 23 or mm > 59:
+            die("时区 {} 非法：小时/分钟超出范围".format(s))
+        return datetime.timezone(datetime.timedelta(hours=h, minutes=mm) * sign)
+    die("无法解析时区 {}，支持格式如 +08:00".format(s))
 
 
 def find_config_path(args):
@@ -183,6 +202,7 @@ def build_parser(cfg):
                    help="卸载已导入的豆瓣 memos（删除 uid 以 douban- 开头的 memo）")
     p.add_argument("--state", default=cfg["state"], help="增量状态文件路径")
     p.add_argument("--timeout", type=int, default=cfg["timeout"], help="HTTP 超时秒数")
+    p.add_argument("--timezone", default=cfg["timezone"], help="时区（默认 +08:00 东八区；格式 +08:00）")
     return p
 
 
@@ -231,20 +251,25 @@ def rating_from_num(num):
 
 def parse_pubdate(s):
     dt = email.utils.parsedate_to_datetime(s)
+    if dt is None:
+        raise ValueError("无法解析 pubDate {!r}".format(s))
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt
 
 
-def parse_rating_date(s):
+def parse_rating_date(s, tz=None):
     s = (s or "").strip().replace("/", "-")
     try:
-        return datetime.datetime.strptime(s, "%Y-%m-%d")
+        dt = datetime.datetime.strptime(s, "%Y-%m-%d")
     except ValueError:
         try:
-            return datetime.datetime.strptime(s, "%Y-%m")
+            dt = datetime.datetime.strptime(s, "%Y-%m")
         except ValueError:
             raise ValueError("无法解析打分日期 {!r}".format(s))
+    if tz is None:
+        tz = parse_timezone(DEFAULT_TIMEZONE)
+    return dt.replace(tzinfo=tz)
 
 
 def strip_movie_useful(comment):
@@ -276,8 +301,10 @@ def save_state(path, state):
     os.replace(tmp, path)
 
 
-def fmt_ts(ts):
-    return time.strftime("%Y-%m-%d %H:%M:%S %z", time.localtime(ts))
+def fmt_ts(ts, tz=None):
+    if tz is None:
+        return time.strftime("%Y-%m-%d %H:%M:%S %z", time.localtime(ts))
+    return datetime.datetime.fromtimestamp(ts, tz).strftime("%Y-%m-%d %H:%M:%S %z")
 
 
 def http_req(url, *, method="GET", data=None, headers=None, timeout=DEFAULT_TIMEOUT):
@@ -378,7 +405,7 @@ def csv_reader(path):
         f.close()
 
 
-def csv_row_to_memo(row, has_detail):
+def csv_row_to_memo(row, has_detail, tz=None):
     row = [c.strip() for c in row]
     if len(row) < 2:
         return None
@@ -404,9 +431,9 @@ def csv_row_to_memo(row, has_detail):
     category = category_from_link(link)
     status = CATEGORY_LABELS.get(category, "看过")
     if rating_date:
-        dt = parse_rating_date(rating_date)
-        ts = int(dt.replace(tzinfo=datetime.timezone(datetime.timedelta(0))).timestamp())
-        create_time = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat()
+        dt = parse_rating_date(rating_date, tz)
+        ts = int(dt.timestamp())
+        create_time = dt.isoformat()
     else:
         dt = None
         ts = 0
@@ -420,7 +447,7 @@ def csv_row_to_memo(row, has_detail):
     }
 
 
-def read_csv_items(paths):
+def read_csv_items(paths, tz=None):
     items = []
     for path in paths:
         has_detail = None
@@ -428,7 +455,7 @@ def read_csv_items(paths):
         for row in csv_reader(path):
             if has_detail is None:
                 has_detail = len(row) >= 5
-            item = csv_row_to_memo(row, has_detail)
+            item = csv_row_to_memo(row, has_detail, tz)
             if item:
                 items.append(item)
                 count += 1
@@ -621,6 +648,7 @@ def sync(cfg):
     api_mode = bool(cfg.get("api"))
     if not api_mode and not cfg.get("db"):
         cfg["db"] = DEFAULT_DB
+    tz = parse_timezone(cfg.get("timezone") or DEFAULT_TIMEZONE)
 
     import_paths = as_str_list(cfg.get("import_csv"))
     user_id = (cfg.get("douban_user_id") or "").strip()
@@ -634,7 +662,7 @@ def sync(cfg):
     try:
         if import_paths:
             print("正在从油猴 CSV 导入历史收藏：{}".format(", ".join(import_paths)))
-            items = read_csv_items(import_paths)
+            items = read_csv_items(import_paths, tz)
         else:
             print("正在从豆瓣 RSS（{}）拉取最近兴趣…".format(RSS_FEED_URL.format(uid=user_id)))
             items = [it for it in (rss_item_to_memo(i) for i in fetch_rss_items(user_id, timeout)) if it]
@@ -646,7 +674,7 @@ def sync(cfg):
     state = load_state(cfg.get("state") or "")
     incremental = (not cfg.get("full")) and state["last_updated_ts"] > 0
     if incremental:
-        print("增量模式：跳过时间戳 <= {} 的旧条目（--full 强制全量）".format(fmt_ts(state["last_updated_ts"])))
+        print("增量模式：跳过时间戳 <= {} 的旧条目（--full 强制全量）".format(fmt_ts(state["last_updated_ts"], tz if import_paths else None)))
     else:
         print("全量模式：首次运行或无有效状态，处理本次抓取的全部条目")
 
